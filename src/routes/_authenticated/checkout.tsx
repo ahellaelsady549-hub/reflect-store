@@ -1,0 +1,306 @@
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { useCart, formatEGP } from "@/lib/cart";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { CreditCard, Wallet, Truck, Smartphone, Store, ShieldCheck } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { getPaymentProviders, startProviderPayment } from "@/lib/payments.functions";
+import { useEffect } from "react";
+
+export const Route = createFileRoute("/_authenticated/checkout")({
+  component: CheckoutPage,
+});
+
+type Method = "card" | "instapay" | "vodafone" | "fawry" | "fawry_online" | "cod";
+
+function CheckoutPage() {
+  const { items, total, clear } = useCart();
+  const navigate = useNavigate();
+  const [method, setMethod] = useState<Method>("card");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [wallet, setWallet] = useState("");
+  const [instapay, setInstapay] = useState("");
+  const [processing, setProcessing] = useState(false);
+  const [promoInput, setPromoInput] = useState("");
+  const [promo, setPromo] = useState<{ code: string; discount: number } | null>(null);
+  const [checkingPromo, setCheckingPromo] = useState(false);
+  const [fawryReady, setFawryReady] = useState(false);
+  const loadProviders = useServerFn(getPaymentProviders);
+  const startPayment = useServerFn(startProviderPayment);
+
+  useEffect(() => {
+    loadProviders()
+      .then((list) => setFawryReady(Boolean(list.find((p) => p.name === "fawry")?.configured)))
+      .catch(() => setFawryReady(false));
+  }, [loadProviders]);
+
+  const discount = promo ? Math.min(promo.discount, total) : 0;
+  const grandTotal = Math.max(0, total - discount);
+
+  if (items.length === 0) {
+    return (
+      <div dir="rtl" className="mx-auto max-w-2xl px-4 py-16 text-center">
+        <p className="mb-4">سلتك فارغة</p>
+        <Link to="/"><Button>تصفح المنتجات</Button></Link>
+      </div>
+    );
+  }
+
+  async function applyPromo() {
+    const code = promoInput.trim();
+    if (!code) return;
+    setCheckingPromo(true);
+    try {
+      const { data, error } = await supabase
+        .from("promo_codes")
+        .select("code,discount_type,discount_value,min_order,max_uses,used_count,starts_at,ends_at,active")
+        .ilike("code", code)
+        .maybeSingle();
+      if (error) throw error;
+      const now = Date.now();
+      const valid =
+        data &&
+        data.active &&
+        new Date(data.starts_at).getTime() <= now &&
+        (!data.ends_at || new Date(data.ends_at).getTime() >= now) &&
+        (data.max_uses == null || data.used_count < data.max_uses) &&
+        total >= Number(data.min_order);
+      if (!valid) {
+        setPromo(null);
+        toast.error("كود غير صحيح أو منتهي / Invalid or expired code");
+        return;
+      }
+      const value =
+        data.discount_type === "percent"
+          ? (total * Number(data.discount_value)) / 100
+          : Number(data.discount_value);
+      setPromo({ code: data.code, discount: Math.round(value) });
+      toast.success("تم تطبيق كود الخصم");
+    } catch (err: any) {
+      toast.error(err.message ?? "خطأ");
+    } finally {
+      setCheckingPromo(false);
+    }
+  }
+
+
+  async function pay(e: React.FormEvent) {
+    e.preventDefault();
+    setProcessing(true);
+    try {
+      const online = method === "fawry_online";
+      if (online && !fawryReady) {
+        toast.error("بوابة فوري غير مفعّلة بعد");
+        return;
+      }
+      if (!online) {
+        // Simulate fake payment gateway processing
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes.user!.id;
+
+      const { data: order, error: orderErr } = await supabase.from("orders").insert({
+        user_id: uid,
+        total: grandTotal,
+        subtotal: total,
+        discount_amount: discount,
+        promo_code: promo?.code ?? null,
+        payment_method: method,
+        shipping_address: address,
+        phone,
+        status: method === "cod" || method === "fawry" || method === "fawry_online" ? "pending" : "paid",
+      }).select().single();
+
+      if (orderErr) throw orderErr;
+
+      const { error: itemsErr } = await supabase.from("order_items").insert(
+        items.map((i) => ({
+          order_id: order.id,
+          product_id: i.id,
+          product_name: i.name,
+          unit_price: i.price,
+          quantity: i.quantity,
+          size: i.size ?? null,
+        })),
+      );
+      if (itemsErr) throw itemsErr;
+
+      if (online) {
+        const res = await startPayment({ data: { orderId: order.id, provider: "fawry" } });
+        clear();
+        window.location.href = res.redirectUrl;
+        return;
+      }
+
+      clear();
+      toast.success("تم إتمام الطلب بنجاح");
+      navigate({ to: "/dashboard" });
+    } catch (err: any) {
+      toast.error(err.message ?? "فشل الدفع");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  return (
+    <div dir="rtl" className="mx-auto max-w-4xl px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">إتمام الشراء</h1>
+      <form onSubmit={pay} className="grid gap-6 md:grid-cols-[1fr_320px]">
+        <div className="space-y-6">
+          <section className="border rounded-lg p-4 bg-card">
+            <h2 className="font-bold mb-4">عنوان الشحن</h2>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="phone">رقم الهاتف</Label>
+                <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="01xxxxxxxxx" />
+              </div>
+              <div>
+                <Label htmlFor="address">العنوان بالتفصيل</Label>
+                <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} required placeholder="المحافظة، المدينة، الشارع، رقم المبنى" />
+              </div>
+            </div>
+          </section>
+
+          <section className="border rounded-lg p-4 bg-card">
+            <h2 className="font-bold mb-4">طريقة الدفع</h2>
+            <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-3">
+              <MethodBtn active={method === "card"} onClick={() => setMethod("card")} icon={<CreditCard className="h-5 w-5" />} label="Kashier (كارت)" />
+              <MethodBtn active={method === "instapay"} onClick={() => setMethod("instapay")} icon={<Smartphone className="h-5 w-5" />} label="إنستاباي" />
+              <MethodBtn active={method === "vodafone"} onClick={() => setMethod("vodafone")} icon={<Wallet className="h-5 w-5" />} label="فودافون كاش" />
+              <MethodBtn active={method === "fawry_online"} onClick={() => setMethod("fawry_online")} icon={<ShieldCheck className="h-5 w-5" />} label="Fawry Pay" />
+              <MethodBtn active={method === "fawry"} onClick={() => setMethod("fawry")} icon={<Store className="h-5 w-5" />} label="فوري" />
+              <MethodBtn active={method === "cod"} onClick={() => setMethod("cod")} icon={<Truck className="h-5 w-5" />} label="عند الاستلام" />
+            </div>
+
+            {method === "card" && (
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="cn">رقم البطاقة</Label>
+                  <Input id="cn" value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} required placeholder="4242 4242 4242 4242" maxLength={19} />
+                </div>
+                <div>
+                  <Label htmlFor="cname">الاسم على البطاقة</Label>
+                  <Input id="cname" value={cardName} onChange={(e) => setCardName(e.target.value)} required />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="exp">تاريخ الانتهاء</Label>
+                    <Input id="exp" value={expiry} onChange={(e) => setExpiry(e.target.value)} required placeholder="MM/YY" maxLength={5} />
+                  </div>
+                  <div>
+                    <Label htmlFor="cvv">CVV</Label>
+                    <Input id="cvv" value={cvv} onChange={(e) => setCvv(e.target.value)} required maxLength={4} />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">🔒 Kashier — وضع تجريبي، مفيش أي فلوس هتتخصم بجد</p>
+              </div>
+            )}
+            {method === "instapay" && (
+              <div>
+                <Label htmlFor="ipa">عنوان إنستاباي (IPA) أو رقم الموبايل</Label>
+                <Input id="ipa" value={instapay} onChange={(e) => setInstapay(e.target.value)} required placeholder="name@instapay أو 01xxxxxxxxx" />
+                <p className="text-xs text-muted-foreground mt-2">
+                  سيتم تحويلك لتأكيد التحويل عبر إنستاباي — بوابة تجريبية، لن يتم خصم مبلغ حقيقي.
+                </p>
+              </div>
+            )}
+            {method === "vodafone" && (
+              <div>
+                <Label htmlFor="w">رقم محفظة فودافون كاش</Label>
+                <Input id="w" value={wallet} onChange={(e) => setWallet(e.target.value)} required placeholder="01xxxxxxxxx" />
+                <p className="text-xs text-muted-foreground mt-2">🔒 بوابة دفع تجريبية</p>
+              </div>
+            )}
+            {method === "fawry_online" && (
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>سيتم تحويلك إلى صفحة الدفع الرسمية من فوري لإتمام العملية بأمان (بطاقة / محفظة / كود فوري).</p>
+                <p>لن نطلب منك رقم البطاقة أو الرقم السري داخل الموقع.</p>
+                {!fawryReady && (
+                  <p className="text-destructive">
+                    بوابة فوري غير مفعّلة بعد — يحتاج الأدمن إلى إضافة بيانات حساب التاجر (Merchant Code / Security Key).
+                  </p>
+                )}
+              </div>
+            )}
+            {method === "fawry" && (
+              <p className="text-sm text-muted-foreground">
+                سيصلك كود فوري بعد تأكيد الطلب، وتقدر تدفع من أقرب منفذ فوري خلال 48 ساعة. (بوابة تجريبية)
+              </p>
+            )}
+            {method === "cod" && (
+              <p className="text-sm text-muted-foreground">ستدفع قيمة الطلب نقدا عند استلام الشحنة.</p>
+            )}
+          </section>
+        </div>
+
+        <div className="border rounded-lg p-4 bg-card h-fit">
+          <h2 className="font-bold mb-4">ملخص الطلب</h2>
+          <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
+            {items.map((i) => (
+              <div key={i.id} className="flex justify-between text-sm">
+                <span className="truncate">{i.name} × {i.quantity}</span>
+                <span className="whitespace-nowrap">{formatEGP(i.price * i.quantity)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mb-3 space-y-2 border-t pt-3">
+            <Label htmlFor="promo">كود الخصم</Label>
+            <div className="flex gap-2">
+              <Input
+                id="promo"
+                value={promoInput}
+                onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                placeholder="REFLECT20"
+              />
+              <Button type="button" variant="secondary" onClick={applyPromo} disabled={checkingPromo}>
+                تطبيق
+              </Button>
+            </div>
+            {promo && (
+              <p className="text-xs text-green-600 dark:text-green-400">
+                ✓ {promo.code} — خصم {formatEGP(discount)}
+                <button type="button" onClick={() => { setPromo(null); setPromoInput(""); }} className="ms-2 underline">
+                  إزالة
+                </button>
+              </p>
+            )}
+          </div>
+          <div className="flex justify-between text-sm">
+            <span>المجموع</span><span>{formatEGP(total)}</span>
+          </div>
+          {discount > 0 && (
+            <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+              <span>الخصم</span><span>-{formatEGP(discount)}</span>
+            </div>
+          )}
+          <div className="border-t mt-2 pt-3 flex justify-between font-bold text-lg">
+            <span>الإجمالي</span><span className="text-primary">{formatEGP(grandTotal)}</span>
+          </div>
+          <Button type="submit" className="w-full mt-4" size="lg" disabled={processing}>
+            {processing ? "جاري المعالجة..." : "تأكيد الدفع"}
+          </Button>
+
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function MethodBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button type="button" onClick={onClick} className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 text-sm transition-colors ${active ? "border-primary bg-primary/5" : "border-border hover:bg-accent"}`}>
+      {icon}<span>{label}</span>
+    </button>
+  );
+}

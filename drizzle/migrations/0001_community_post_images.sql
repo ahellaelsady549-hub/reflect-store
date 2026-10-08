@@ -1,0 +1,3 @@
+ALTER TABLE public.community_posts ADD COLUMN IF NOT EXISTS image_url text;
+CREATE POLICY "community images admin upload" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'community' AND public.has_role(auth.uid(), 'admin'));
+CREATE POLICY "community images admin delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'community' AND public.has_role(auth.uid(), 'admin'));
