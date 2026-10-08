@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Package, ShoppingBag, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { OrderStatusTracker } from "@/components/order-status-tracker";
+import { normalizeGoogleMapsUrl } from "@/lib/google-maps";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -17,6 +18,8 @@ type OrderRow = {
   status: string;
   payment_method: string;
   shipping_address: string;
+  backup_phone: string | null;
+  google_maps_url: string | null;
   created_at: string;
   order_items: { product_name: string; unit_price: number; quantity: number }[];
 };
@@ -31,7 +34,7 @@ function Dashboard() {
     queryFn: async (): Promise<OrderRow[]> => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id,total,status,payment_method,shipping_address,created_at,order_items(product_name,unit_price,quantity)")
+        .select("id,total,status,payment_method,shipping_address,backup_phone,google_maps_url,created_at,order_items(product_name,unit_price,quantity)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as unknown as OrderRow[];
@@ -113,6 +116,12 @@ function Dashboard() {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mt-3">📍 {o.shipping_address}</p>
+              {o.backup_phone && <p className="text-xs text-muted-foreground mt-1">☎ رقم احتياطي: {o.backup_phone}</p>}
+              {o.google_maps_url && normalizeGoogleMapsUrl(o.google_maps_url) && (
+                <a href={normalizeGoogleMapsUrl(o.google_maps_url) ?? undefined} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-primary underline underline-offset-2">
+                  فتح موقع الاستلام على Google Maps
+                </a>
+              )}
               {CANCELLABLE.includes(o.status) && (
                 <Button variant="outline" size="sm" className="mt-3 text-destructive" onClick={() => cancelOrder(o.id)}>
                   <XCircle className="h-4 w-4 me-1" /> {t("cancel_order")}

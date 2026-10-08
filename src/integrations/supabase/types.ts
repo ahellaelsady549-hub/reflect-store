@@ -242,8 +242,10 @@ export type Database = {
       }
       orders: {
         Row: {
+          backup_phone: string | null
           created_at: string
           discount_amount: number
+          google_maps_url: string | null
           id: string
           payment_method: string
           phone: string
@@ -255,8 +257,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          backup_phone?: string | null
           created_at?: string
           discount_amount?: number
+          google_maps_url?: string | null
           id?: string
           payment_method: string
           phone: string
@@ -268,8 +272,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          backup_phone?: string | null
           created_at?: string
           discount_amount?: number
+          google_maps_url?: string | null
           id?: string
           payment_method?: string
           phone?: string

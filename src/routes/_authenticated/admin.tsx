@@ -7,6 +7,7 @@ import { useI18n, formatMoney } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Trash2, Users, Bell, ShoppingBag, ScrollText, Package, MessageCircle, Send, Flag, Tag, Download, Search, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { normalizeGoogleMapsUrl } from "@/lib/google-maps";
 import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -355,7 +356,13 @@ function AdminPage() {
                   <p><span className="text-muted-foreground">👤 </span>{o.customer_name || "—"}</p>
                   <p><span className="text-muted-foreground">✉️ </span>{o.customer_email || "—"}</p>
                   <p><span className="text-muted-foreground">📞 </span>{o.phone || "—"}</p>
+                  {o.backup_phone && <p><span className="text-muted-foreground">☎ </span>{o.backup_phone}</p>}
                   <p><span className="text-muted-foreground">📍 </span>{o.shipping_address}</p>
+                  {o.google_maps_url && normalizeGoogleMapsUrl(o.google_maps_url) && (
+                    <a href={normalizeGoogleMapsUrl(o.google_maps_url) ?? undefined} target="_blank" rel="noreferrer" className="inline-block text-primary underline underline-offset-2">
+                      فتح موقع الاستلام على Google Maps
+                    </a>
+                  )}
                 </div>
                 <div className="text-xs space-y-1 border-t pt-2">
                   {(o.order_items ?? []).map((i: any, idx: number) => {

@@ -98,7 +98,7 @@ function AuthPage() {
 
   const tabs: Array<["signin" | "signup", string]> = [
     ["signup", ar ? "حساب جديد" : "Sign up"],
-    ["signin", ar ? "دخول" : "Sign in"],
+    ["signin", ar ? "تسجيل دخول" : "Sign in"],
   ];
 
   return (
@@ -143,7 +143,7 @@ function AuthPage() {
                 <input className={`${field} pe-12`} type={showPw ? "text" : "password"} dir="ltr" value={password}
                   onChange={(e) => setPassword(e.target.value)} required minLength={6} />
                 <button type="button" onClick={() => setShowPw((v) => !v)}
-                  aria-label={showPw ? (ar ? "إخفاء الباسورد" : "Hide password") : (ar ? "إظهار الباسورد" : "Show password")}
+                  aria-label={showPw ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                   className="absolute inset-y-0 end-0 flex w-12 items-center justify-center text-muted-foreground hover:text-foreground">
                   {showPw ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>

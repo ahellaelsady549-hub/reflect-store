@@ -120,13 +120,13 @@ export function ProductCard({ product }: { product: Product }) {
           </Link>
         </div>
       )}
-      <div className="absolute bottom-[7.5rem] end-2 z-10 flex flex-col items-center gap-[4px]">
+      <div className="absolute bottom-[6.5rem] end-2 z-10 flex flex-col items-center gap-[6px]">
         <button onClick={onWish} aria-label={t("wishlist")} title={t("wishlist")}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-background/90 shadow transition hover:scale-110">
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-background/90 shadow transition hover:scale-110">
           <Heart className={`h-4 w-4 ${liked ? "fill-destructive text-destructive" : "text-muted-foreground"}`} />
         </button>
         <button onClick={onCompare} aria-label="compare" title={lang === "ar" ? "قارن" : "Compare"}
-          className={`flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition hover:scale-105 ${compared ? "border-primary bg-primary text-primary-foreground shadow-primary/20" : "border-border bg-background/95 text-muted-foreground hover:border-primary/50 hover:text-foreground"}`}>
+          className={`flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition hover:scale-105 ${compared ? "border-primary bg-primary text-primary-foreground shadow-primary/20" : "border-border bg-background/95 text-muted-foreground hover:border-primary/50 hover:text-foreground"}`}>
           <Scale className="h-4 w-4" />
         </button>
       </div>

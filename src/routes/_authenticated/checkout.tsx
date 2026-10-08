@@ -6,16 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CreditCard, Wallet, Truck, Smartphone, Store, ShieldCheck } from "lucide-react";
-import { useServerFn } from "@tanstack/react-start";
-import { getPaymentProviders, startProviderPayment } from "@/lib/payments.functions";
-import { useEffect } from "react";
+import { CreditCard, Wallet, Truck, Smartphone } from "lucide-react";
+import { normalizeGoogleMapsUrl } from "@/lib/google-maps";
 
 export const Route = createFileRoute("/_authenticated/checkout")({
   component: CheckoutPage,
 });
 
-type Method = "card" | "instapay" | "vodafone" | "fawry" | "fawry_online" | "cod";
+type Method = "card" | "instapay" | "vodafone" | "cod";
 
 function CheckoutPage() {
   const { items, total, clear } = useCart();
@@ -23,6 +21,8 @@ function CheckoutPage() {
   const [method, setMethod] = useState<Method>("card");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [backupPhone, setBackupPhone] = useState("");
+  const [mapsUrl, setMapsUrl] = useState("");
   const [cardNumber, setCardNumber] = useState("");
   const [cardName, setCardName] = useState("");
   const [expiry, setExpiry] = useState("");
@@ -33,16 +33,6 @@ function CheckoutPage() {
   const [promoInput, setPromoInput] = useState("");
   const [promo, setPromo] = useState<{ code: string; discount: number } | null>(null);
   const [checkingPromo, setCheckingPromo] = useState(false);
-  const [fawryReady, setFawryReady] = useState(false);
-  const loadProviders = useServerFn(getPaymentProviders);
-  const startPayment = useServerFn(startProviderPayment);
-
-  useEffect(() => {
-    loadProviders()
-      .then((list) => setFawryReady(Boolean(list.find((p) => p.name === "fawry")?.configured)))
-      .catch(() => setFawryReady(false));
-  }, [loadProviders]);
-
   const discount = promo ? Math.min(promo.discount, total) : 0;
   const grandTotal = Math.max(0, total - discount);
 
@@ -95,17 +85,15 @@ function CheckoutPage() {
 
   async function pay(e: React.FormEvent) {
     e.preventDefault();
+    const verifiedMapsUrl = normalizeGoogleMapsUrl(mapsUrl);
+    if (!verifiedMapsUrl) {
+      toast.error("أدخل رابط موقع صحيح من Google Maps");
+      return;
+    }
+
     setProcessing(true);
     try {
-      const online = method === "fawry_online";
-      if (online && !fawryReady) {
-        toast.error("بوابة فوري غير مفعّلة بعد");
-        return;
-      }
-      if (!online) {
-        // Simulate fake payment gateway processing
-        await new Promise((r) => setTimeout(r, 1500));
-      }
+      await new Promise((r) => setTimeout(r, 1500));
 
       const { data: userRes } = await supabase.auth.getUser();
       const uid = userRes.user!.id;
@@ -119,7 +107,9 @@ function CheckoutPage() {
         payment_method: method,
         shipping_address: address,
         phone,
-        status: method === "cod" || method === "fawry" || method === "fawry_online" ? "pending" : "paid",
+        backup_phone: backupPhone.trim() || null,
+        google_maps_url: verifiedMapsUrl,
+        status: method === "cod" ? "pending" : "paid",
       }).select().single();
 
       if (orderErr) throw orderErr;
@@ -135,13 +125,6 @@ function CheckoutPage() {
         })),
       );
       if (itemsErr) throw itemsErr;
-
-      if (online) {
-        const res = await startPayment({ data: { orderId: order.id, provider: "fawry" } });
-        clear();
-        window.location.href = res.redirectUrl;
-        return;
-      }
 
       clear();
       toast.success("تم إتمام الطلب بنجاح");
@@ -159,27 +142,33 @@ function CheckoutPage() {
       <form onSubmit={pay} className="grid gap-6 md:grid-cols-[1fr_320px]">
         <div className="space-y-6">
           <section className="border rounded-lg p-4 bg-card">
-            <h2 className="font-bold mb-4">عنوان الشحن</h2>
+            <h2 className="font-bold mb-4">بيانات الاستلام</h2>
             <div className="space-y-3">
               <div>
                 <Label htmlFor="phone">رقم الهاتف</Label>
                 <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="01xxxxxxxxx" />
               </div>
               <div>
-                <Label htmlFor="address">العنوان بالتفصيل</Label>
+                <Label htmlFor="backup-phone">رقم احتياطي (اختياري)</Label>
+                <Input id="backup-phone" type="tel" value={backupPhone} onChange={(e) => setBackupPhone(e.target.value)} placeholder="01xxxxxxxxx" />
+              </div>
+              <div>
+                <Label htmlFor="address">عنوان الاستلام</Label>
                 <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} required placeholder="المحافظة، المدينة، الشارع، رقم المبنى" />
+              </div>
+              <div>
+                <Label htmlFor="maps-url">عنوان الاستلام على Google Maps</Label>
+                <Input id="maps-url" type="url" value={mapsUrl} onChange={(e) => setMapsUrl(e.target.value)} required placeholder="https://maps.app.goo.gl/..." />
               </div>
             </div>
           </section>
 
           <section className="border rounded-lg p-4 bg-card">
             <h2 className="font-bold mb-4">طريقة الدفع</h2>
-            <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-2">
               <MethodBtn active={method === "card"} onClick={() => setMethod("card")} icon={<CreditCard className="h-5 w-5" />} label="Kashier (كارت)" />
               <MethodBtn active={method === "instapay"} onClick={() => setMethod("instapay")} icon={<Smartphone className="h-5 w-5" />} label="إنستاباي" />
               <MethodBtn active={method === "vodafone"} onClick={() => setMethod("vodafone")} icon={<Wallet className="h-5 w-5" />} label="فودافون كاش" />
-              <MethodBtn active={method === "fawry_online"} onClick={() => setMethod("fawry_online")} icon={<ShieldCheck className="h-5 w-5" />} label="Fawry Pay" />
-              <MethodBtn active={method === "fawry"} onClick={() => setMethod("fawry")} icon={<Store className="h-5 w-5" />} label="فوري" />
               <MethodBtn active={method === "cod"} onClick={() => setMethod("cod")} icon={<Truck className="h-5 w-5" />} label="عند الاستلام" />
             </div>
 
@@ -221,22 +210,6 @@ function CheckoutPage() {
                 <Input id="w" value={wallet} onChange={(e) => setWallet(e.target.value)} required placeholder="01xxxxxxxxx" />
                 <p className="text-xs text-muted-foreground mt-2">🔒 بوابة دفع تجريبية</p>
               </div>
-            )}
-            {method === "fawry_online" && (
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>سيتم تحويلك إلى صفحة الدفع الرسمية من فوري لإتمام العملية بأمان (بطاقة / محفظة / كود فوري).</p>
-                <p>لن نطلب منك رقم البطاقة أو الرقم السري داخل الموقع.</p>
-                {!fawryReady && (
-                  <p className="text-destructive">
-                    بوابة فوري غير مفعّلة بعد — يحتاج الأدمن إلى إضافة بيانات حساب التاجر (Merchant Code / Security Key).
-                  </p>
-                )}
-              </div>
-            )}
-            {method === "fawry" && (
-              <p className="text-sm text-muted-foreground">
-                سيصلك كود فوري بعد تأكيد الطلب، وتقدر تدفع من أقرب منفذ فوري خلال 48 ساعة. (بوابة تجريبية)
-              </p>
             )}
             {method === "cod" && (
               <p className="text-sm text-muted-foreground">ستدفع قيمة الطلب نقدا عند استلام الشحنة.</p>
