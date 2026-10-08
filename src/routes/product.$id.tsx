@@ -8,7 +8,7 @@ import { Stars, StarsInput } from "@/components/stars";
 import { ProductReviews } from "@/components/product-reviews";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
-import { Minus, Plus, ArrowRight, ArrowLeft, Ruler } from "lucide-react";
+import { Minus, Plus, ArrowRight, ArrowLeft } from "lucide-react";
 import { sanitizeImageUrl } from "@/lib/image-safety";
 
 export const Route = createFileRoute("/product/$id")({
@@ -25,29 +25,6 @@ export const Route = createFileRoute("/product/$id")({
   component: ProductPage,
 });
 
-const STANDARD_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
-
-function sizeRank(size: string) {
-  const normalized = size.trim().toUpperCase().replaceAll(" ", "");
-  const aliases: Record<string, string> = { "2XL": "XXL", "3XL": "XXXL" };
-  return STANDARD_SIZES.indexOf(aliases[normalized] ?? normalized);
-}
-
-function estimateSize(heightCm: number, weightKg: number, availableSizes: string[]) {
-  const bmi = weightKg / (heightCm / 100) ** 2;
-  const rank = bmi < 18.5 ? 0 : bmi < 20.5 ? 1 : bmi < 23.5 ? 2 : bmi < 27 ? 3 : bmi < 31 ? 4 : 5;
-
-  const inStock = availableSizes
-    .map((size) => ({ size, rank: sizeRank(size) }))
-    .filter((option) => option.rank >= 0);
-  if (inStock.length === 0) return { size: STANDARD_SIZES[rank], matched: false };
-
-  const closest = inStock.reduce((best, option) =>
-    Math.abs(option.rank - rank) < Math.abs(best.rank - rank) ? option : best,
-  );
-  return { size: closest.size, matched: true };
-}
-
 function ProductPage() {
   const { id } = Route.useParams();
   const [qty, setQty] = useState(1);
@@ -60,8 +37,6 @@ function ProductPage() {
   const [activeColor, setActiveColor] = useState<string | null>(null);
   const [activeImage, setActiveImage] = useState(0);
   const [activeSize, setActiveSize] = useState<string | null>(null);
-  const [heightCm, setHeightCm] = useState("");
-  const [weightKg, setWeightKg] = useState("");
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["product", id],
@@ -111,12 +86,6 @@ function ProductPage() {
     ? sizes.reduce((a, x) => a + Math.max(0, Number(x.stock) || 0), 0)
     : Number((product as any).stock ?? 0);
   const selected = sizes.find((s) => s.size === activeSize) ?? null;
-  const inStockSizes = sizes.filter((size) => Number(size.stock) > 0).map((size) => size.size);
-  const validHeight = Number(heightCm) >= 100 && Number(heightCm) <= 230;
-  const validWeight = Number(weightKg) >= 25 && Number(weightKg) <= 250;
-  const sizeRecommendation = validHeight && validWeight
-    ? estimateSize(Number(heightCm), Number(weightKg), inStockSizes)
-    : null;
   const availableForSelection = sizes.length ? Number(selected?.stock ?? 0) : totalStock;
   const soldOut = totalStock <= 0;
   const finalPrice = Number(product.price) * (1 - product.discount_percent / 100);
@@ -206,45 +175,6 @@ function ProductPage() {
               </div>
             </div>
           )}
-
-          <section className="mb-6 space-y-3 rounded-lg border bg-card p-4">
-            <div className="flex items-center gap-2 font-semibold">
-              <Ruler className="h-4 w-4 text-primary" />
-              <h2>{lang === "ar" ? "مساعد اختيار المقاس" : "Size guide"}</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-sm">
-                <span className="mb-1 block">{lang === "ar" ? "الطول (سم)" : "Height (cm)"}</span>
-                <input type="number" min="100" max="230" value={heightCm} onChange={(event) => setHeightCm(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3" placeholder="170" />
-              </label>
-              <label className="text-sm">
-                <span className="mb-1 block">{lang === "ar" ? "الوزن (كجم)" : "Weight (kg)"}</span>
-                <input type="number" min="25" max="250" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3" placeholder="70" />
-              </label>
-            </div>
-            {sizeRecommendation && (
-              <div className="rounded-md bg-primary/5 p-3 text-sm" aria-live="polite">
-                <p className="font-semibold">
-                  {lang === "ar" ? "المقاس المقترح:" : "Suggested size:"} {sizeRecommendation.size}
-                </p>
-                {!sizeRecommendation.matched && sizes.length > 0 && (
-                  <p className="mt-1 text-muted-foreground">
-                    {lang === "ar" ? "المقاسات المتاحة لهذا المنتج لا تطابق نظام XS–XXXL؛ راجع الخيارات أعلاه." : "This product uses custom sizes; check the available options above."}
-                  </p>
-                )}
-                {sizeRecommendation.matched && (
-                  <button type="button" onClick={() => { setActiveSize(sizeRecommendation.size); setQty(1); }} className="mt-2 text-primary underline underline-offset-2">
-                    {lang === "ar" ? "اختيار المقاس المتاح" : "Select this size"}
-                  </button>
-                )}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {lang === "ar"
-                ? "تقدير ثابت باستخدام الطول والوزن (BMI)، وليس قياسًا مضمونًا. دقة أعلى تحتاج جدول مقاسات المنتج ومحيط الصدر والخصر." 
-                : "A rule-based estimate from height and weight (BMI). It is not a guaranteed fit; a product size chart and body measurements are needed for higher accuracy."}
-            </p>
-          </section>
 
           <p className={`mb-4 text-sm ${soldOut ? "text-destructive" : availableForSelection <= 5 && (sizes.length === 0 || activeSize) ? "text-amber-600" : "text-green-600"}`}>
             {t("availability")}: {soldOut

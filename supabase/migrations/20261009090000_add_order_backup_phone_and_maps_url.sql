@@ -1,3 +1,5 @@
 ALTER TABLE public.orders
-  ADD COLUMN backup_phone TEXT,
-  ADD COLUMN google_maps_url TEXT;
+  ADD COLUMN IF NOT EXISTS backup_phone TEXT,
+  ADD COLUMN IF NOT EXISTS google_maps_url TEXT;
+
+NOTIFY pgrst, 'reload schema';

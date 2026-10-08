@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { CreditCard, Wallet, Truck, Smartphone } from "lucide-react";
-import { normalizeGoogleMapsUrl } from "@/lib/google-maps";
 
 export const Route = createFileRoute("/_authenticated/checkout")({
   component: CheckoutPage,
@@ -21,8 +20,6 @@ function CheckoutPage() {
   const [method, setMethod] = useState<Method>("card");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
-  const [backupPhone, setBackupPhone] = useState("");
-  const [mapsUrl, setMapsUrl] = useState("");
   const [cardNumber, setCardNumber] = useState("");
   const [cardName, setCardName] = useState("");
   const [expiry, setExpiry] = useState("");
@@ -85,12 +82,6 @@ function CheckoutPage() {
 
   async function pay(e: React.FormEvent) {
     e.preventDefault();
-    const verifiedMapsUrl = normalizeGoogleMapsUrl(mapsUrl);
-    if (!verifiedMapsUrl) {
-      toast.error("أدخل رابط موقع صحيح من Google Maps");
-      return;
-    }
-
     setProcessing(true);
     try {
       await new Promise((r) => setTimeout(r, 1500));
@@ -107,8 +98,6 @@ function CheckoutPage() {
         payment_method: method,
         shipping_address: address,
         phone,
-        backup_phone: backupPhone.trim() || null,
-        google_maps_url: verifiedMapsUrl,
         status: method === "cod" ? "pending" : "paid",
       }).select().single();
 
@@ -149,16 +138,8 @@ function CheckoutPage() {
                 <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="01xxxxxxxxx" />
               </div>
               <div>
-                <Label htmlFor="backup-phone">رقم احتياطي (اختياري)</Label>
-                <Input id="backup-phone" type="tel" value={backupPhone} onChange={(e) => setBackupPhone(e.target.value)} placeholder="01xxxxxxxxx" />
-              </div>
-              <div>
                 <Label htmlFor="address">عنوان الاستلام</Label>
                 <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} required placeholder="المحافظة، المدينة، الشارع، رقم المبنى" />
-              </div>
-              <div>
-                <Label htmlFor="maps-url">عنوان الاستلام على Google Maps</Label>
-                <Input id="maps-url" type="url" value={mapsUrl} onChange={(e) => setMapsUrl(e.target.value)} required placeholder="https://maps.app.goo.gl/..." />
               </div>
             </div>
           </section>
