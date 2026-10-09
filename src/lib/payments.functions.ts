@@ -44,24 +44,33 @@ export const startProviderPayment = createServerFn({ method: "POST" })
     // ---- Server-side price recomputation (never trust the client) ----
     const items = order.order_items ?? [];
     if (items.length === 0) throw new Error("Order has no items");
-    const productIds = items.map((i: any) => i.product_id).filter(Boolean);
-    const { data: products } = await supabaseAdmin
+    if (items.some((i) => !i.product_id || !Number.isInteger(i.quantity) || i.quantity < 1)) {
+      throw new Error("Order contains invalid items");
+    }
+    const productIds = items
+      .map((i) => i.product_id)
+      .filter((id): id is string => id !== null);
+    const { data: products, error: productsErr } = await supabaseAdmin
       .from("products")
       .select("id,price,discount_percent")
-      .in("id", productIds.length ? productIds : ["00000000-0000-0000-0000-000000000000"]);
-    const priceMap = new Map(
-      (products ?? []).map((p: any) => [
-        p.id,
-        Math.round(Number(p.price) * (1 - Number(p.discount_percent ?? 0) / 100)),
-      ]),
-    );
+      .in("id", productIds);
+    if (productsErr) throw new Error(productsErr.message);
+    const priceMap = new Map<string, number>();
+    for (const product of products ?? []) {
+      priceMap.set(
+        product.id,
+        Math.round(Number(product.price) * (1 - Number(product.discount_percent ?? 0) / 100)),
+      );
+    }
 
     let subtotal = 0;
-    const chargeItems = items.map((i: any) => {
-      const unit = priceMap.get(i.product_id) ?? Number(i.unit_price);
+    const chargeItems = items.map((i) => {
+      if (!i.product_id) throw new Error("Order contains an unavailable product");
+      const unit = priceMap.get(i.product_id);
+      if (unit === undefined) throw new Error("Order contains an unavailable product");
       subtotal += unit * Number(i.quantity);
       return {
-        id: String(i.product_id ?? i.id),
+        id: i.product_id,
         description: String(i.product_name).slice(0, 50),
         price: unit,
         quantity: Number(i.quantity),
@@ -70,7 +79,11 @@ export const startProviderPayment = createServerFn({ method: "POST" })
     const amount = Math.max(0, subtotal - Number(order.discount_amount ?? 0));
     if (amount <= 0) throw new Error("Invalid order amount");
 
-    await supabaseAdmin.from("orders").update({ subtotal, total: amount, status: "pending" }).eq("id", order.id);
+    const { error: updateErr } = await supabaseAdmin
+      .from("orders")
+      .update({ subtotal, total: amount, status: "pending" })
+      .eq("id", order.id);
+    if (updateErr) throw new Error(updateErr.message);
 
     // ---- Reuse a pending payment when the customer retries ----
     const { data: existing } = await supabaseAdmin
