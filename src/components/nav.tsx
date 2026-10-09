@@ -90,7 +90,6 @@ export function Nav() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:px-4">
         <Link to="/" className="flex min-w-0 items-center gap-2 truncate font-bold text-base sm:text-lg transition-opacity hover:opacity-70">
           <img src={logo} alt="Reflect" width={36} height={36} className="h-9 w-9 shrink-0 object-contain dark:brightness-0 dark:invert" />
-          <span className="truncate">Reflect</span>
         </Link>
 
         <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">

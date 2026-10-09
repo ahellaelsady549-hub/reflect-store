@@ -208,6 +208,83 @@
   outline-offset: 2px;
 }
 
+/* Home page motion stays on compositor-friendly opacity and transforms. */
+@keyframes reflect-enter {
+  from { opacity: 0; transform: translateY(24px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes reflect-hero-enter {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.home-hero { animation: reflect-hero-enter 0.75s cubic-bezier(0.2, 0.75, 0.25, 1) both; }
+.home-hero > .relative > * { animation: reflect-hero-enter 0.7s cubic-bezier(0.2, 0.75, 0.25, 1) both; }
+.home-hero > .relative > *:nth-child(2) { animation-delay: 0.08s; }
+.home-hero > .relative > *:nth-child(3) { animation-delay: 0.16s; }
+.home-hero > .relative > *:nth-child(4) { animation-delay: 0.24s; }
+
+.has-scroll-reveal .scroll-reveal,
+.has-scroll-reveal .scroll-reveal-stagger {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.65s cubic-bezier(0.2, 0.75, 0.25, 1), transform 0.65s cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+.has-scroll-reveal .scroll-reveal.is-visible,
+.has-scroll-reveal .scroll-reveal-stagger.is-visible { opacity: 1; transform: translateY(0); }
+.scroll-reveal-stagger.is-visible > * { animation: reflect-enter 0.6s cubic-bezier(0.2, 0.75, 0.25, 1) both; }
+.scroll-reveal-stagger.is-visible > *:nth-child(2) { animation-delay: 0.06s; }
+.scroll-reveal-stagger.is-visible > *:nth-child(3) { animation-delay: 0.12s; }
+.scroll-reveal-stagger.is-visible > *:nth-child(4) { animation-delay: 0.18s; }
+.scroll-reveal-stagger.is-visible > *:nth-child(5) { animation-delay: 0.24s; }
+.scroll-reveal-stagger.is-visible > *:nth-child(6) { animation-delay: 0.3s; }
+.scroll-reveal-stagger.is-visible > *:nth-child(7) { animation-delay: 0.36s; }
+.scroll-reveal-stagger.is-visible > *:nth-child(8) { animation-delay: 0.42s; }
+
+.product-tile { transition: transform 0.28s ease, box-shadow 0.28s ease; }
+.product-tile img { transition: transform 0.55s cubic-bezier(0.2, 0.75, 0.25, 1); }
+@media (hover: hover) and (pointer: fine) {
+  .product-tile:hover { transform: translateY(-5px); box-shadow: 0 16px 34px -22px color-mix(in oklab, var(--primary) 55%, transparent); }
+  .product-tile:hover img { transform: scale(1.055); }
+}
+
+.footer-social { isolation: isolate; background: transparent; color: var(--color-foreground); }
+.footer-social__wash {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  transform: scale(0.7) rotate(-12deg);
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+.footer-social__icon svg { width: 22px; height: 22px; }
+.footer-social--instagram .footer-social__icon { color: oklch(0.56 0.23 345); }
+.footer-social--whatsapp .footer-social__icon { color: oklch(0.59 0.17 150); }
+.footer-social--tiktok { color: var(--color-foreground); }
+.footer-social--tiktok .footer-social__icon svg { overflow: visible; }
+.footer-social--tiktok .footer-social__icon path:last-child { fill: currentColor; }
+.footer-social--instagram .footer-social__wash { background: linear-gradient(135deg, oklch(0.63 0.24 350), oklch(0.59 0.24 20) 52%, oklch(0.75 0.17 65)); }
+.footer-social--whatsapp .footer-social__wash { background: oklch(0.64 0.18 150); }
+.footer-social--tiktok .footer-social__wash { background: oklch(0.12 0 0); }
+.footer-social:is(:hover, :active, :focus-visible) { color: white; border-color: transparent; }
+.footer-social:is(:hover, :active, :focus-visible) .footer-social__wash { opacity: 1; transform: scale(1.15) rotate(0); }
+.footer-social:is(:hover, :active, :focus-visible) .footer-social__icon { color: white; }
+.footer-social--tiktok:is(:hover, :active, :focus-visible) .footer-social__icon path:last-child { fill: white; }
+
+html::before {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 100;
+  width: 100%;
+  height: 3px;
+  background: var(--gradient-cta);
+  content: "";
+  transform: scaleX(var(--page-progress, 0));
+  transform-origin: left;
+  pointer-events: none;
+}
+[dir="rtl"]::before { transform-origin: right; }
+
 /* Users who prefer less motion get instant, non-animated transitions */
 @media (prefers-reduced-motion: reduce) {
   .sk-overlay, .sk-drawer, .sk-stagger > *, .sk-pop, .sk-spin-in, .sk-flip-in {
@@ -218,6 +295,14 @@
   .sk-icon-btn, .sk-icon-btn:hover, .sk-icon-btn:active { transform: none !important; transition: none !important; }
   .sk-overlay { backdrop-filter: none; }
   .sk-no-motion { transition: none !important; }
+  .home-hero, .home-hero > .relative > *, .scroll-reveal-stagger.is-visible > * { animation: none !important; }
+  .has-scroll-reveal .scroll-reveal, .has-scroll-reveal .scroll-reveal-stagger { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .product-tile, .product-tile img { transition: none !important; }
+  .footer-social, .footer-social__wash, .footer-social__icon { transition: none !important; }
+  .footer-social:hover { transform: none !important; }
+  .footer-social__wash { transform: none; }
+  .footer-social__icon { transform: none !important; }
+  html::before { display: none; }
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;

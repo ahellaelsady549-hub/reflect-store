@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n, formatMoney, CATEGORY_KEYS, categoryLabel } from "@/lib/i18n";
@@ -26,7 +26,7 @@ function Hero({ count, onShop }: { count: number; onShop: () => void }) {
   const { lang } = useI18n();
   const ar = lang === "ar";
   return (
-    <section className="bg-panel relative mb-8 overflow-hidden rounded-[2rem] px-6 py-12 text-primary-foreground shadow-soft sm:px-12 sm:py-16">
+    <section className="home-hero bg-panel relative mb-8 overflow-hidden rounded-[2rem] px-6 py-12 text-primary-foreground shadow-soft sm:px-12 sm:py-16">
       <div aria-hidden className="bg-cta absolute -end-20 -top-20 h-64 w-64 rounded-full opacity-40 blur-3xl" />
       <div className="relative max-w-2xl">
         <span className="mb-5 inline-block rounded-full border border-primary-foreground/20 bg-primary-foreground/10 px-4 py-1.5 text-xs font-extrabold tracking-wide">
@@ -56,9 +56,7 @@ function Hero({ count, onShop }: { count: number; onShop: () => void }) {
 type Sort = "newest" | "price_asc" | "price_desc" | "rating";
 
 function Home() {
-  const navigate = useNavigate();
   const { t, lang } = useI18n();
-  const [authed, setAuthed] = useState<boolean | null>(null);
   const [category, setCategory] = useState<string>("الكل");
   const [priceMin, setPriceMin] = useState<string>("");
   const [priceMax, setPriceMax] = useState<string>("");
@@ -67,24 +65,68 @@ function Home() {
   const [showFilters, setShowFilters] = useState(false);
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(8);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) navigate({ to: "/auth" });
-      else setAuthed(true);
+    const selector = ".scroll-reveal, .scroll-reveal-stagger";
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-visible");
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -48px 0px" });
+    const observeElements = (root: ParentNode) => {
+      if (root instanceof Element && root.matches(selector)) observer.observe(root);
+      root.querySelectorAll(selector).forEach((element) => observer.observe(element));
+    };
+    const mutations = new MutationObserver((records) => {
+      records.forEach((record) => record.addedNodes.forEach((node) => {
+        if (node instanceof Element) observeElements(node);
+      }));
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (!session) navigate({ to: "/auth" });
-      else setAuthed(true);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, [navigate]);
+
+    document.documentElement.classList.add("has-scroll-reveal");
+    observeElements(document);
+    mutations.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      mutations.disconnect();
+      document.documentElement.classList.remove("has-scroll-reveal");
+    };
+  }, []);
+
+  useEffect(() => {
+    let frame = 0;
+    const updateProgress = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        const progress = maxScroll > 0 ? window.scrollY / maxScroll : 0;
+        document.documentElement.style.setProperty("--page-progress", String(progress));
+      });
+    };
+    updateProgress();
+    window.addEventListener("scroll", updateProgress, { passive: true });
+    window.addEventListener("resize", updateProgress);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", updateProgress);
+      window.removeEventListener("resize", updateProgress);
+      document.documentElement.style.removeProperty("--page-progress");
+    };
+  }, []);
+
+  useEffect(() => {
+    setVisibleCount(8);
+  }, [query, category, priceMin, priceMax, minStars, sort]);
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products"],
-    enabled: authed === true,
     queryFn: async (): Promise<Product[]> => {
-      const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("products")
+        .select("id,name,description,category,image_url,images,sizes,price,discount_percent,stock,rating_avg,rating_count")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data as unknown as Product[];
     },
@@ -119,14 +161,10 @@ function Home() {
     setCategory("الكل"); setPriceMin(""); setPriceMax(""); setMinStars(0); setSort("newest"); setQuery("");
   };
 
-  if (authed !== true) {
-    return <p className="text-center py-20 text-muted-foreground">{t("loading")}</p>;
-  }
-
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <Hero count={products.length} onShop={() => document.getElementById("shop")?.scrollIntoView({ behavior: "smooth" })} />
-      <div id="shop" className="relative mb-4 scroll-mt-24">
+      <div id="shop" className="scroll-reveal relative mb-4 scroll-mt-24">
         <Search className="pointer-events-none absolute top-1/2 start-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           value={query}
@@ -161,7 +199,7 @@ function Home() {
         )}
       </div>
 
-      <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="scroll-reveal mb-4 flex items-center justify-between gap-2">
         <h1 className="text-xl font-bold">{t("products")}</h1>
         <div className="flex items-center gap-2">
           <select
@@ -226,12 +264,14 @@ function Home() {
         <p className="text-center py-10 text-muted-foreground">{t("no_products")}</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
-            {filtered.slice(0, 8).map((p) => <ProductCard key={p.id} product={p} />)}
+          <div className="scroll-reveal-stagger grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
+            {filtered.slice(0, visibleCount).map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
-          {filtered.length > 8 && (
-            <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
-              {filtered.slice(8).map((p) => <ProductCard key={p.id} product={p} />)}
+          {filtered.length > visibleCount && (
+            <div className="mt-8 flex justify-center">
+              <Button variant="outline" onClick={() => setVisibleCount((count) => count + 8)}>
+                {lang === "ar" ? "عرض المزيد" : "Show more"}
+              </Button>
             </div>
           )}
         </>

@@ -107,7 +107,7 @@ export function ProductCard({ product }: { product: Product }) {
   }
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-lg">
+    <div className="product-tile group relative overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-lg">
       {isAdmin && (
         <div className="absolute top-2 start-2 z-10 flex gap-1">
           <button onClick={onDelete} className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow transition hover:scale-110" aria-label={t("delete_product")} title={t("delete_product")}>
