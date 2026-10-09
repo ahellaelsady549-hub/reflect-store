@@ -20,6 +20,12 @@ function CheckoutPage() {
   const [method, setMethod] = useState<Method>("card");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [wallet, setWallet] = useState("");
+  const [instapay, setInstapay] = useState("");
   const [processing, setProcessing] = useState(false);
   const [promoInput, setPromoInput] = useState("");
   const [promo, setPromo] = useState<{ code: string; discount: number } | null>(null);
@@ -78,25 +84,42 @@ function CheckoutPage() {
     e.preventDefault();
     setProcessing(true);
     try {
-      const { data: orderId, error } = await supabase.rpc("create_order", {
-        _items: items.map((item) => ({
-          product_id: item.id,
-          quantity: item.quantity,
-          size: item.size ?? null,
+      await new Promise((r) => setTimeout(r, 1500));
+
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes.user!.id;
+
+      const { data: order, error: orderErr } = await supabase.from("orders").insert({
+        user_id: uid,
+        total: grandTotal,
+        subtotal: total,
+        discount_amount: discount,
+        promo_code: promo?.code ?? null,
+        payment_method: method,
+        shipping_address: address,
+        phone,
+        status: method === "cod" ? "pending" : "paid",
+      }).select().single();
+
+      if (orderErr) throw orderErr;
+
+      const { error: itemsErr } = await supabase.from("order_items").insert(
+        items.map((i) => ({
+          order_id: order.id,
+          product_id: i.id,
+          product_name: i.name,
+          unit_price: i.price,
+          quantity: i.quantity,
+          size: i.size ?? null,
         })),
-        _payment_method: method,
-        _shipping_address: address,
-        _phone: phone,
-        _promo_code: promo?.code ?? null,
-      });
-      if (error) throw error;
-      if (!orderId) throw new Error("تعذر إنشاء الطلب");
+      );
+      if (itemsErr) throw itemsErr;
 
       clear();
-      toast.success(method === "cod" ? "تم استلام طلبك" : "تم تسجيل الطلب وهو بانتظار تأكيد الدفع");
+      toast.success("تم إتمام الطلب بنجاح");
       navigate({ to: "/dashboard" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "فشل الطلب");
+      toast.error(err instanceof Error ? err.message : "فشل الدفع");
     } finally {
       setProcessing(false);
     }
@@ -131,19 +154,43 @@ function CheckoutPage() {
             </div>
 
             {method === "card" && (
-              <p className="text-sm text-muted-foreground">
-                الدفع بالبطاقة غير متاح حاليًا. لن نطلب أو نخزن بيانات بطاقتك، وسيظل الطلب بانتظار تأكيد الدفع.
-              </p>
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="cn">رقم البطاقة</Label>
+                  <Input id="cn" value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} required placeholder="4242 4242 4242 4242" maxLength={19} />
+                </div>
+                <div>
+                  <Label htmlFor="cname">الاسم على البطاقة</Label>
+                  <Input id="cname" value={cardName} onChange={(e) => setCardName(e.target.value)} required />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="exp">تاريخ الانتهاء</Label>
+                    <Input id="exp" value={expiry} onChange={(e) => setExpiry(e.target.value)} required placeholder="MM/YY" maxLength={5} />
+                  </div>
+                  <div>
+                    <Label htmlFor="cvv">CVV</Label>
+                    <Input id="cvv" value={cvv} onChange={(e) => setCvv(e.target.value)} required maxLength={4} />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">🔒 Kashier — وضع تجريبي، مفيش أي فلوس هتتخصم بجد</p>
+              </div>
             )}
             {method === "instapay" && (
-              <p className="text-sm text-muted-foreground">
-                لن يُطلب منك إدخال بيانات مالية هنا. سيظل الطلب بانتظار التحقق من التحويل.
-              </p>
+              <div>
+                <Label htmlFor="ipa">عنوان إنستاباي (IPA) أو رقم الموبايل</Label>
+                <Input id="ipa" value={instapay} onChange={(e) => setInstapay(e.target.value)} required placeholder="name@instapay أو 01xxxxxxxxx" />
+                <p className="text-xs text-muted-foreground mt-2">
+                  سيتم تحويلك لتأكيد التحويل عبر إنستاباي — بوابة تجريبية، لن يتم خصم مبلغ حقيقي.
+                </p>
+              </div>
             )}
             {method === "vodafone" && (
-              <p className="text-sm text-muted-foreground">
-                لن يُطلب منك إدخال بيانات المحفظة هنا. سيظل الطلب بانتظار التحقق من التحويل.
-              </p>
+              <div>
+                <Label htmlFor="w">رقم محفظة فودافون كاش</Label>
+                <Input id="w" value={wallet} onChange={(e) => setWallet(e.target.value)} required placeholder="01xxxxxxxxx" />
+                <p className="text-xs text-muted-foreground mt-2">🔒 بوابة دفع تجريبية</p>
+              </div>
             )}
             {method === "cod" && (
               <p className="text-sm text-muted-foreground">ستدفع قيمة الطلب نقدا عند استلام الشحنة.</p>
@@ -195,7 +242,7 @@ function CheckoutPage() {
             <span>الإجمالي</span><span className="text-primary">{formatEGP(grandTotal)}</span>
           </div>
           <Button type="submit" className="w-full mt-4" size="lg" disabled={processing}>
-            {processing ? "جاري المعالجة..." : method === "cod" ? "تأكيد الطلب" : "إنشاء الطلب"}
+            {processing ? "جاري المعالجة..." : "تأكيد الدفع"}
           </Button>
 
         </div>
